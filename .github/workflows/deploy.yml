@@ -15,29 +15,29 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: '20' # Ensure this matches your local Node version
+          node-version: '20'
           cache: 'npm'
 
       - name: Install & Build
-        # Building the admin panel on GitHub saves your Droplet's RAM
         run: |
           npm install
           NODE_ENV=production npm run build
 
-      - name: Prepare Artifact
-        # Package the project, excluding large folders that aren't needed or are server-specific
-        run: tar -czf deploy.tar.gz . --exclude=.git --exclude=node_modules --exclude=test --exclude=.cache
-
-      - name: Copy Files to Droplet
-        uses: appleboy/scp-action@v0.1.7
+      - name: Deploy to Droplet via Rsync
+        uses: bitovi/github-actions-rsync@v0.1.2
         with:
-          host: ${{ secrets.HOST }}
-          username: ${{ secrets.USERNAME }}
-          key: ${{ secrets.SSH_KEY }}
-          source: "deploy.tar.gz"
-          target: "~/gap-group-blog"
+          # SSH Setup
+          remote_host: ${{ secrets.HOST }}
+          remote_user: ${{ secrets.USERNAME }}
+          ssh_private_key: ${{ secrets.SSH_KEY }}
+          
+          # Rsync Config
+          remote_path: "~/gap-group-blog"
+          source_path: "./"
+          # Exclude files we don't want on the server
+          rsync_args: "--exclude=.git --exclude=node_modules --exclude=test --exclude=.cache --exclude=.github"
 
-      - name: Finalize on Droplet
+      - name: Restart Strapi via SSH
         uses: appleboy/ssh-action@v1.0.3
         with:
           host: ${{ secrets.HOST }}
@@ -45,8 +45,5 @@ jobs:
           key: ${{ secrets.SSH_KEY }}
           script: |
             cd ~/gap-group-blog
-            tar -xzf deploy.tar.gz
-            rm deploy.tar.gz
             npm install --production
-            # This line restarts the app if it's running, or starts it if it's the first time
             pm2 restart gap-group-blog || pm2 start npm --name "gap-group-blog" -- start
