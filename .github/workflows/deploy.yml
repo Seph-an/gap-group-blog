@@ -23,21 +23,28 @@ jobs:
           npm install
           NODE_ENV=production npm run build
 
-      - name: Deploy to Droplet via Rsync
-        uses: bitovi/github-actions-rsync@v0.1.2
-        with:
-          # SSH Setup
-          remote_host: ${{ secrets.HOST }}
-          remote_user: ${{ secrets.USERNAME }}
-          ssh_private_key: ${{ secrets.SSH_KEY }}
+      - name: Deploy via Native Rsync
+        env:
+          SSH_KEY: ${{ secrets.SSH_KEY }}
+        run: |
+          # 1. Setup SSH directory and private key
+          mkdir -p ~/.ssh
+          echo "$SSH_KEY" > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
           
-          # Rsync Config
-          remote_path: "~/gap-group-blog"
-          source_path: "./"
-          # Exclude files we don't want on the server
-          rsync_args: "--exclude=.git --exclude=node_modules --exclude=test --exclude=.cache --exclude=.github"
+          # 2. Add Droplet to known_hosts to prevent "Host authenticity" prompt
+          ssh-keyscan -H ${{ secrets.HOST }} >> ~/.ssh/known_hosts
+          
+          # 3. Run rsync (This is the standard Linux rsync command)
+          rsync -avz --delete \
+            -e "ssh -i ~/.ssh/deploy_key" \
+            --exclude='.git/' \
+            --exclude='.github/' \
+            --exclude='node_modules/' \
+            --exclude='.cache/' \
+            ./ ${{ secrets.USERNAME }}@${{ secrets.HOST }}:~/gap-group-blog
 
-      - name: Restart Strapi via SSH
+      - name: Finalize on Droplet
         uses: appleboy/ssh-action@v1.0.3
         with:
           host: ${{ secrets.HOST }}
