@@ -44,6 +44,14 @@
     "blocks": {
       "type": "dynamiczone",
       "components": ["shared.media", "shared.quote", "shared.rich-text", "shared.slider"]
+    },
+    "site": {
+      "type": "enumeration",
+      "enum": [
+        "gap",
+        "cvitup",
+        "urbanac"
+      ]
     }
   }
 }
