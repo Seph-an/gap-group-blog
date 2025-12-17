@@ -35,9 +35,10 @@ jobs:
           # 2. Add Droplet to known_hosts to prevent "Host authenticity" prompt
           ssh-keyscan -H ${{ secrets.HOST }} >> ~/.ssh/known_hosts
           
-          # 3. Run rsync (This is the standard Linux rsync command)
+          # 3. Run rsync
+          # This syncs your local build to the droplet, excluding unnecessary files
           rsync -avz --delete \
-            -e "ssh -i ~/.ssh/deploy_key" \
+            -e "ssh -i ~/.ssh/deploy_key -o StrictHostKeyChecking=no" \
             --exclude='.git/' \
             --exclude='.github/' \
             --exclude='node_modules/' \
@@ -51,6 +52,12 @@ jobs:
           username: ${{ secrets.USERNAME }}
           key: ${{ secrets.SSH_KEY }}
           script: |
+            # 1. Add your specific NVM path so bash finds npm and pm2
+            export PATH=$PATH:/home/grsl/.nvm/versions/node/v22.14.0/bin
+            
+            # 2. Navigate to project
             cd ~/gap-group-blog
+            
+            # 3. Install production dependencies and restart
             npm install --production
             pm2 restart gap-group-blog || pm2 start npm --name "gap-group-blog" -- start
