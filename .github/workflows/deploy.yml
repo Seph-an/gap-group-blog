@@ -9,42 +9,50 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
+      # 1. Pull the code from GitHub
       - name: Checkout Code
         uses: actions/checkout@v4
 
+      # 2. Setup Node.js in the GitHub Runner
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
           node-version: '20'
           cache: 'npm'
 
+      # 3. Install dependencies and Build the Admin Panel
+      # This creates the 'build' folder which is required for production
       - name: Install & Build
         run: |
           npm install
           NODE_ENV=production npm run build
 
+      # 4. Deploy files to DigitalOcean via Rsync
       - name: Deploy via Native Rsync
         env:
           SSH_KEY: ${{ secrets.SSH_KEY }}
         run: |
-          # 1. Setup SSH directory and private key
+          # Setup SSH key for the session
           mkdir -p ~/.ssh
           echo "$SSH_KEY" > ~/.ssh/deploy_key
           chmod 600 ~/.ssh/deploy_key
-          
-          # 2. Add Droplet to known_hosts to prevent "Host authenticity" prompt
           ssh-keyscan -H ${{ secrets.HOST }} >> ~/.ssh/known_hosts
           
-          # 3. Run rsync
-          # This syncs your local build to the droplet, excluding unnecessary files
+          # Sync files
+          # --delete cleans up old code
+          # --exclude protects your database, uploads, and secrets from being wiped
           rsync -avz --delete \
             -e "ssh -i ~/.ssh/deploy_key -o StrictHostKeyChecking=no" \
             --exclude='.git/' \
             --exclude='.github/' \
             --exclude='node_modules/' \
             --exclude='.cache/' \
+            --exclude='.env' \
+            --exclude='.tmp/' \
+            --exclude='public/uploads/' \
             ./ ${{ secrets.USERNAME }}@${{ secrets.HOST }}:~/gap-group-blog
 
+      # 5. Finalize the restart on the Droplet
       - name: Finalize on Droplet
         uses: appleboy/ssh-action@v1.0.3
         with:
@@ -52,12 +60,14 @@ jobs:
           username: ${{ secrets.USERNAME }}
           key: ${{ secrets.SSH_KEY }}
           script: |
-            # 1. Add your specific NVM path so bash finds npm and pm2
+            # Add your NVM node version path to the session PATH
             export PATH=$PATH:/home/grsl/.nvm/versions/node/v22.14.0/bin
             
-            # 2. Navigate to project
+            # Navigate to the project directory
             cd ~/gap-group-blog
             
-            # 3. Install production dependencies and restart
+            # Install only production modules on the server
             npm install --production
+            
+            # Restart the app. If it's not running, start it for the first time.
             pm2 restart gap-group-blog || pm2 start npm --name "gap-group-blog" -- start
