@@ -3,12 +3,82 @@
 const fs = require('fs-extra');
 const path = require('path');
 const mime = require('mime-types');
-const { categories, authors, articles, global, about } = require('../data/data.json');
+const { categories, global, about } = require('../data/data.json');
+
+const newCategories = [
+  'recruitment',
+  'payroll',
+  'interviews',
+  'CVs',
+  'careers',
+  'AI',
+  'new-job',
+];
+
+const newBlogs = [
+  {
+    title: 'The Rise of AI in Recruitment',
+    description: 'How AI is changing the way we hire.',
+    slug: 'the-rise-of-ai-in-recruitment',
+    article: `# The Rise of AI in Recruitment
+
+Artificial Intelligence (AI) is revolutionizing the recruitment landscape. From automated resume screening to intelligent candidate sourcing, AI-powered tools are helping companies find the right talent faster and more efficiently.
+
+## Key Areas of Impact
+
+*   **Candidate Sourcing:** AI algorithms can analyze millions of online profiles to identify potential candidates who match specific job requirements.
+*   **Resume Screening:** Natural Language Processing (NLP) can be used to screen resumes and identify the most qualified candidates.
+*   **Chatbots:** AI-powered chatbots can engage with candidates, answer their questions, and even conduct initial screening interviews.
+
+While AI offers many benefits, it's important to be aware of the potential for bias and to ensure that AI tools are used ethically and responsibly.`,
+    isFeatured: true,
+    read_time: 2,
+    categories: ['AI', 'recruitment'],
+  },
+  {
+    title: 'Crafting the Perfect CV for the Modern Job Market',
+    description: 'Tips and tricks for creating a CV that stands out.',
+    slug: 'crafting-the-perfect-cv-for-the-modern-job-market',
+    article: `# Crafting the Perfect CV for the Modern Job Market
+
+Your CV is your first impression on a potential employer. In today's competitive job market, it's more important than ever to have a CV that is clear, concise, and tailored to the job you're applying for.
+
+## Top Tips
+
+1.  **Keep it to one page:** Recruiters are busy. Make it easy for them to see your key qualifications at a glance.
+2.  **Use keywords:** Many companies use Applicant Tracking Systems (ATS) to screen CVs. Make sure your CV includes keywords from the job description.
+3.  **Quantify your achievements:** Instead of just listing your responsibilities, provide concrete examples of your accomplishments.
+
+By following these tips, you can create a CV that will help you land your dream job.`,
+    isFeatured: true,
+    read_time: 2,
+    categories: ['CVs', 'careers', 'new-job'],
+  },
+  {
+    title: 'Mastering the Art of the Interview',
+    description: 'How to prepare for and ace your next job interview.',
+    slug: 'mastering-the-art-of-the-interview',
+    article: `# Mastering the Art of the Interview
+
+The interview is your chance to shine. It's an opportunity to showcase your skills, experience, and personality. With the right preparation, you can ace your next interview and land the job you've always wanted.
+
+## Preparation is Key
+
+*   **Research the company:** Understand their mission, values, and recent news.
+*   **Practice your answers:** Be prepared to answer common interview questions.
+*   **Prepare your own questions:** Asking thoughtful questions shows that you're engaged and interested in the role.
+
+Good luck!`,
+    isFeatured: true,
+    read_time: 2,
+    categories: ['interviews', 'careers', 'new-job'],
+  },
+];
 
 async function seedExampleApp() {
-  const shouldImportSeedData = await isFirstRun();
+  // const shouldImportSeedData = await isFirstRun();
 
-  if (shouldImportSeedData) {
+  // if (shouldImportSeedData) {
     try {
       console.log('Setting up the template...');
       await importSeedData();
@@ -17,11 +87,11 @@ async function seedExampleApp() {
       console.log('Could not import seed data');
       console.error(error);
     }
-  } else {
-    console.log(
-      'Seed data has already been imported. We cannot reimport unless you clear your database first.'
-    );
-  }
+  // } else {
+  //   console.log(
+  //     'Seed data has already been imported. We cannot reimport unless you clear your database first.'
+  //   );
+  // }
 }
 
 async function isFirstRun() {
@@ -166,23 +236,7 @@ async function updateBlocks(blocks) {
   return updatedBlocks;
 }
 
-async function importArticles() {
-  for (const article of articles) {
-    const cover = await checkFileExistsBeforeUpload([`${article.slug}.jpg`]);
-    const updatedBlocks = await updateBlocks(article.blocks);
 
-    await createEntry({
-      model: 'article',
-      entry: {
-        ...article,
-        cover,
-        blocks: updatedBlocks,
-        // Make sure it's not a draft
-        publishedAt: Date.now(),
-      },
-    });
-  }
-}
 
 async function importGlobal() {
   const favicon = await checkFileExistsBeforeUpload(['favicon.png']);
@@ -222,36 +276,75 @@ async function importCategories() {
   }
 }
 
-async function importAuthors() {
-  for (const author of authors) {
-    const avatar = await checkFileExistsBeforeUpload([author.avatar]);
 
-    await createEntry({
-      model: 'author',
-      entry: {
-        ...author,
-        avatar,
-      },
+async function importBlogsAndCategories() {
+  const categoryMap = new Map();
+
+  for (const categoryName of newCategories) {
+    const existingCategory = await strapi.db.query('api::category.category').findOne({
+      where: { Title: categoryName },
     });
+
+    if (!existingCategory) {
+      try {
+        console.log(`Creating category: ${categoryName}`);
+        const category = await strapi.entityService.create('api::category.category', {
+          data: {
+            Title: categoryName,
+            Filter: categoryName,
+            publishedAt: new Date(),
+          },
+        });
+        categoryMap.set(categoryName, category.id);
+      } catch (e) {
+        console.error(`Error creating category: ${categoryName}`, e);
+      }
+    } else {
+      categoryMap.set(categoryName, existingCategory.id);
+    }
+  }
+
+  for (const blog of newBlogs) {
+    const existingBlog = await strapi.db.query('api::blog.blog').findOne({
+      where: { slug: blog.slug },
+    });
+
+    if (!existingBlog) {
+      const categoryIds = blog.categories.map((catName) => categoryMap.get(catName));
+      try {
+        console.log(`Creating blog: ${blog.title}`);
+        await strapi.entityService.create('api::blog.blog', {
+          data: {
+            ...blog,
+            categories: categoryIds,
+            publishedAt: new Date(),
+          },
+        });
+      } catch (e) {
+        console.error(`Error creating blog: ${blog.title}`, e);
+      }
+    } else {
+      console.log(`Blog already exists: ${blog.title}`);
+    }
   }
 }
 
 async function importSeedData() {
   // Allow read of application content types
   await setPublicPermissions({
-    article: ['find', 'findOne'],
     category: ['find', 'findOne'],
-    author: ['find', 'findOne'],
     global: ['find', 'findOne'],
     about: ['find', 'findOne'],
   });
 
   // Create all entries
   await importCategories();
-  await importAuthors();
-  await importArticles();
   await importGlobal();
   await importAbout();
+
+  if (process.env.SEED_BLOGS_AND_CATEGORIES === 'true') {
+    await importBlogsAndCategories();
+  }
 }
 
 async function main() {
